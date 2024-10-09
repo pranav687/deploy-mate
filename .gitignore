@@ -21,7 +21,7 @@ build/
 .vscode/
 
 # Compiled files
-*.js
+
 *.map
 
 # OS-specific files
