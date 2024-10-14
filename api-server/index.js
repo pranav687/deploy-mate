@@ -3,13 +3,24 @@ const express = require('express')
 const { generateSlug } = require('random-word-slugs')
 const { ECSClient, RunTaskCommand } = require('@aws-sdk/client-ecs')
 require('dotenv').config({ path: '.env' });
-// const { Server } = require('socket.io')
-// const Redis = require('ioredis')
+const { Server, Socket } = require('socket.io')
+const Redis = require('ioredis')
+
+
 
 const app = express()
 const PORT_API_SERVER = process.env.PORT_API_SERVER
+const subscriber = new Redis(process.env.REDIS_SERVICE_URL)
+const io = new Server({ cors: '*' })
 
-// io.listen(9002, () => console.log('Socket Server 9002'))
+io.listen(9002, () => console.log('Socket Server 9002'))
+
+io.on('connection', socket => {
+    socket.on('subscribe', channel => {
+        socket.join(channel);
+        socket.emit('message', `joined : ${channel}`)
+    })
+})
 console.log(process.env.AWS_ECS_TASK)
 const ecsClient = new ECSClient({
     region: process.env.AWS_REGION,
@@ -28,8 +39,8 @@ const config = {
 app.use(express.json())
 
 app.post('/project', async (req, res) => {
-    const { gitURL } = req.body
-    const projectSlug = generateSlug()
+    const { gitURL, slug } = req.body
+    const projectSlug = slug ? slug : generateSlug()
 
     // Spin the container
     const command = new RunTaskCommand({
@@ -63,5 +74,14 @@ app.post('/project', async (req, res) => {
 
 })
 
+function initReditSubscribe() {
+    console.log("Subscribed to logs")
+    subscriber.psubscribe('logs:*')
+    subscriber.on('pmessage', (pattern, channel, message) => {
+        console.log(`Pattern: ${pattern}, Channel: ${channel}, Message: ${message}`);
+        io.to(channel).emit('message', message);
+    });
 
+}
+initReditSubscribe()
 app.listen(PORT_API_SERVER, () => console.log(`API Server Running..${PORT_API_SERVER}`))
